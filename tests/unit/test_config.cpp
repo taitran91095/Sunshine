@@ -10,6 +10,7 @@
 #include <array>
 #include <filesystem>
 #include <format>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -280,4 +281,62 @@ TEST_F(ConfigPersistenceTest, ParsesNvencTwoPassModesAndDefaultsUnknownValues) {
     config::apply_config_for_test(std::string {"nvenc_twopass = "} + std::string {setting} + "\n");
     EXPECT_EQ(config::video.nv.two_pass, expected) << setting;
   }
+}
+
+namespace config {
+  /**
+   * @brief Parse server commands without applying unrelated platform configuration.
+   * @param vars Configuration entries.
+   * @param name Configuration key.
+   * @param destination Parsed commands.
+   */
+  void list_server_cmd_f(config_map_t &vars, const std::string &name, std::vector<server_cmd_t> &destination);
+}
+
+/**
+ * @brief Parse names, commands, privilege defaults, and replacement of old settings.
+ */
+TEST(ConfigServerCommandsTest, ParsesAndReplacesCommands) {
+  auto vars = config::parse_config(R"(server_cmd = [{"name":"One","cmd":"echo one"},{"name":"Two","cmd":"echo two","elevated":true}])");
+  std::vector<config::server_cmd_t> commands;
+  config::list_server_cmd_f(vars, "server_cmd", commands);
+  ASSERT_EQ(commands.size(), 2);
+  EXPECT_EQ(commands[0].name, "One");
+  EXPECT_EQ(commands[0].cmd, "echo one");
+  EXPECT_FALSE(commands[0].elevated);
+  EXPECT_TRUE(commands[1].elevated);
+  EXPECT_TRUE(vars.empty());
+  vars = config::parse_config("server_cmd = []");
+  config::list_server_cmd_f(vars, "server_cmd", commands);
+  EXPECT_TRUE(commands.empty());
+  commands.push_back({"unchanged", "echo", false});
+  EXPECT_NO_THROW(config::list_server_cmd_f(vars, "server_cmd", commands));
+  EXPECT_EQ(commands.size(), 1);
+}
+
+/**
+ * @brief Invalid entries fail atomically rather than changing command wire indices.
+ */
+TEST(ConfigServerCommandsTest, RejectsMalformedEntriesAndOversizedLists) {
+  for (const auto value : {"{}", "null", "[{}]", R"([{"name":" ","cmd":"echo"}])", R"([{"name":"x","cmd":""}])", "[invalid]"}) {
+    config::config_map_t vars {{"server_cmd", value}};
+    std::vector<config::server_cmd_t> commands {{"original", "echo original", false}};
+    EXPECT_THROW(config::list_server_cmd_f(vars, "server_cmd", commands), std::exception);
+    ASSERT_EQ(commands.size(), 1);
+    EXPECT_EQ(commands[0].name, "original");
+  }
+  std::string value = "[";
+  for (int i = 0; i < 256; ++i) {
+    if (i) {
+      value += ',';
+    }
+    value += R"({"name":"x","cmd":"echo"})";
+  }
+  config::config_map_t vars {{"server_cmd", value + "]"}};
+  std::vector<config::server_cmd_t> commands;
+  EXPECT_NO_THROW(config::list_server_cmd_f(vars, "server_cmd", commands));
+  EXPECT_EQ(commands.size(), 256);
+  vars = {{"server_cmd", value + R"(,{"name":"overflow","cmd":"echo"}])"}};
+  EXPECT_THROW(config::list_server_cmd_f(vars, "server_cmd", commands), std::invalid_argument);
+  EXPECT_EQ(commands.size(), 256);
 }

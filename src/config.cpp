@@ -10,6 +10,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <stdexcept>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -909,6 +910,7 @@ namespace config {
     false,  // notify_pre_releases
     true,  // system_tray
     {},  // prep commands
+    {},  // server commands
     {},  // csrf_allowed_origins
   };
 
@@ -1487,6 +1489,43 @@ namespace config {
   }
 
   /**
+   * @brief Read Apollo-compatible server commands, preserving their wire indices.
+   * @param vars Parsed configuration entries; consumed keys are erased.
+   * @param name Configuration key to consume.
+   * @param destination Commands replaced after successful validation.
+   */
+  void list_server_cmd_f(config_map_t &vars, const std::string &name, std::vector<server_cmd_t> &destination) {
+    std::string value;
+    string_f(vars, name, value);
+    if (value.empty()) {
+      return;
+    }
+    const auto first = value.find_first_not_of(" \t\r\n");
+    const auto last = value.find_last_not_of(" \t\r\n");
+    if (first == std::string::npos || value[first] != '[' || value[last] != ']') {
+      throw std::invalid_argument("server_cmd must be a JSON array");
+    }
+    std::stringstream stream;
+    stream << "{\"commands\":" << value << "}";
+    boost::property_tree::ptree tree;
+    boost::property_tree::read_json(stream, tree);
+    std::vector<server_cmd_t> commands;
+    for (const auto &[key, entry] : tree.get_child("commands")) {
+      auto cmd_name = entry.get<std::string>("name");
+      auto cmd = entry.get<std::string>("cmd");
+      if (!key.empty() || cmd_name.find_first_not_of(" \t\r\n") == std::string::npos ||
+          cmd.find_first_not_of(" \t\r\n") == std::string::npos || commands.size() >= 256) {
+        throw std::invalid_argument("server_cmd requires at most 256 named, nonempty commands");
+      }
+      commands.push_back({std::move(cmd_name), std::move(cmd), entry.get<bool>("elevated", false)});
+    }
+    if (!tree.get_child("commands").data().empty()) {
+      throw std::invalid_argument("server_cmd must be a JSON array");
+    }
+    destination = std::move(commands);
+  }
+
+  /**
    * @brief Consume an integer list setting from decimal or hexadecimal configuration text.
    *
    * @param vars Parsed configuration entries; consumed keys are erased.
@@ -1768,6 +1807,7 @@ namespace config {
 
     string_f(vars, "external_ip", nvhttp.external_ip);
     list_prep_cmd_f(vars, "global_prep_cmd", config::sunshine.prep_cmds);
+    list_server_cmd_f(vars, "server_cmd", config::sunshine.server_cmds);
 
     string_f(vars, "audio_sink", audio.sink);
     string_f(vars, "virtual_sink", audio.virtual_sink);

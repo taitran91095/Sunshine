@@ -32,6 +32,7 @@ extern "C" {
 #include "network.h"
 #include "platform/common.h"
 #include "process.h"
+#include "server_commands.h"
 #include "stream.h"
 #include "sync.h"
 #include "system_tray.h"
@@ -54,8 +55,9 @@ constexpr int IDX_SET_MOTION_EVENT = 13;  ///< Control-stream message index for 
 constexpr int IDX_SET_RGB_LED = 14;  ///< Control-stream message index for set rgb led.
 constexpr int IDX_SET_ADAPTIVE_TRIGGERS = 15;  ///< Control-stream message index for set adaptive triggers.
 constexpr int IDX_SET_PLAYER_LEDS = 16;  ///< Control-stream message index for set player indicator LEDs.
+constexpr int IDX_EXEC_SERVER_CMD = 17;  ///< Apollo server-command request index.
 
-static const std::array<short, 17> packetTypes = {
+static const std::array<short, 18> packetTypes = {
   0x0305,  // Start A
   0x0307,  // Start B
   0x0301,  // Invalidate reference frames
@@ -73,6 +75,7 @@ static const std::array<short, 17> packetTypes = {
   0x5502,  // Set RGB LED (Sunshine protocol extension)
   0x5503,  // Set Adaptive triggers (Sunshine protocol extension)
   0x5504,  // Set player indicator LEDs (Sunshine protocol extension)
+  0x3000,  // Execute server command (Apollo protocol extension)
 };
 
 namespace asio = boost::asio;
@@ -1246,6 +1249,31 @@ namespace stream {
       }
 
       input::passthrough(session->input, std::move(plaintext));
+    });
+
+    server->map(packetTypes[IDX_EXEC_SERVER_CMD], [](session_t *session, const std::string_view &payload) {
+      const auto index = server_commands::command_index(payload, config::sunshine.server_cmds.size(), session->config.controlProtocolType);
+      if (!index) {
+        BOOST_LOG(warning) << "Rejected invalid server command request";
+        return;
+      }
+      // Copy session environment and configuration before asynchronous execution.
+      auto cmd = config::sunshine.server_cmds[*index];
+      auto env = proc::proc.get_env();
+      task_pool.push([cmd = std::move(cmd), env = std::move(env)]() mutable {
+        try {
+          std::error_code ec;
+          const auto working_dir = proc::find_working_directory(cmd.cmd, env);
+          auto child = platf::run_command(cmd.elevated, true, cmd.cmd, working_dir, env, nullptr, ec, nullptr);
+          if (ec) {
+            BOOST_LOG(error) << "Failed to execute server command " << cmd.name << ": " << ec.message();
+          } else {
+            child.detach();
+          }
+        } catch (const std::exception &err) {
+          BOOST_LOG(error) << "Server command failed: " << err.what();
+        }
+      });
     });
 
     server->map(packetTypes[IDX_ENCRYPTED], [server](session_t *session, const std::string_view &payload) {

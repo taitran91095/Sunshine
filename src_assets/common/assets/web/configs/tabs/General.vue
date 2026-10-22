@@ -14,6 +14,7 @@ const props = defineProps({
   config: Object
 })
 const config = ref(props.config)
+config.value.server_cmd ??= [];
 
 function addCmd() {
   let template = {
@@ -29,6 +30,11 @@ function addCmd() {
 
 function removeCmd(index) {
   config.value.global_prep_cmd.splice(index,1)
+}
+function addServerCmd() {
+  if (config.value.server_cmd.length < 256) {
+    config.value.server_cmd.push({ name: "", cmd: "", elevated: false });
+  }
 }
 </script>
 
@@ -133,6 +139,21 @@ function removeCmd(index) {
       <button class="ms-0 mt-2 btn btn-success" style="margin: 0 auto" @click="addCmd">
         &plus; {{ $t('config.add') }}
       </button>
+    </div>
+
+    <!-- Server Commands -->
+    <div id="server_cmd" class="mb-3">
+      <div class="form-label">{{ $t('config.server_cmd') }}</div>
+      <div class="form-text">{{ $t('config.server_cmd_desc') }}</div>
+      <div v-for="(c, i) in config.server_cmd" :key="i" class="d-flex gap-2 my-2">
+        <label :for="`server-cmd-name-${i}`" class="visually-hidden">{{ $t('config.server_cmd_name') }}</label>
+        <input :id="`server-cmd-name-${i}`" class="form-control" v-model="c.name" :placeholder="$t('config.server_cmd_name')" required />
+        <label :for="`server-cmd-value-${i}`" class="visually-hidden">{{ $t('config.server_cmd_value') }}</label>
+        <input :id="`server-cmd-value-${i}`" class="form-control monospace" v-model="c.cmd" :placeholder="$t('config.server_cmd_value')" required />
+        <Checkbox v-if="platform === 'windows'" :id="`server-cmd-admin-${i}`" label="_common.elevated" desc="" v-model="c.elevated" />
+        <button type="button" class="btn btn-danger" :aria-label="$t('_common.delete')" @click="config.server_cmd.splice(i, 1)"><Trash2 :size="16" /></button>
+      </div>
+      <button type="button" class="btn btn-success" :disabled="config.server_cmd.length >= 256" @click="addServerCmd">&plus; {{ $t('config.add') }}</button>
     </div>
 
     <!-- Notify Pre-Releases -->

@@ -368,6 +368,15 @@ namespace config {
   };
 
   /**
+   * @brief A host-defined command exposed to paired streaming clients.
+   */
+  struct server_cmd_t {
+    std::string name;  ///< Display name advertised to clients.
+    std::string cmd;  ///< Host command line; never supplied by the client.
+    bool elevated = false;  ///< Request elevated execution on supported platforms.
+  };
+
+  /**
    * @brief Top-level Sunshine configuration and credential state.
    */
   struct sunshine_t {
@@ -401,6 +410,8 @@ namespace config {
     bool notify_pre_releases;  ///< Notify users about pre-release updates.
     bool system_tray;  ///< Enable the system tray integration.
     std::vector<prep_cmd_t> prep_cmds;  ///< Preparation commands executed around application launch.
+
+    std::vector<server_cmd_t> server_cmds;  ///< Commands callable by paired clients over encrypted streams.
 
     // List of allowed origins for CSRF protection (e.g., "https://example.com,https://app.example.com")
     // Comma-separated list of additional origins. Default includes localhost variants and web UI port.

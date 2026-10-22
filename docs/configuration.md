@@ -230,6 +230,31 @@ consent prompt for directory ACLs, so the Web UI shows setup steps for correctin
     </tr>
 </table>
 
+### server_cmd
+
+A list of host-defined commands callable from a compatible client's streaming menu.
+This ports the [Apollo Server Commands](https://github.com/ClassicOldSong/Apollo/wiki/Server-Commands)
+protocol (`ServerCommand` elements in paired HTTPS server information and control packet `0x3000`
+with an unsigned byte containing the zero-based command index followed by three reserved zero bytes).
+The compact single-byte variant is also accepted.
+
+Each entry requires a nonempty `name` and `cmd`, with optional `elevated` (default `false`).
+At most 256 commands are supported. Commands run asynchronously with the streaming application's
+environment and the executable's working directory. Use an explicit shell executable for shell scripts.
+
+Unlike Apollo, Sunshine has no per-client command permissions: **every paired client with an encrypted
+control stream can invoke configured commands**. Configure only commands you intend those clients to run.
+Clients cannot submit arbitrary command text. Empty lists disable the feature; unencrypted requests are rejected.
+Stock Moonlight clients need support for this extension to display and invoke commands.
+
+**Default**
+    `[]`
+
+**Example**
+    ```text
+    server_cmd = [{"name":"Calculator","cmd":"calc.exe","elevated":false}]
+    ```
+
 ### global_prep_cmd
 
 <table>

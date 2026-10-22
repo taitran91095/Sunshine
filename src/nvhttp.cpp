@@ -1271,6 +1271,12 @@ namespace nvhttp {
     // For HTTP requests, use a placeholder MAC address that Moonlight knows to ignore.
     if constexpr (std::is_same_v<SunshineHTTPS, T>) {
       tree.put("root.mac", platf::get_mac_address(net::addr_to_normalized_string(local_endpoint.address())));
+      // Apollo-compatible discovery is only exposed on the paired HTTPS endpoint.
+      for (const auto &cmd : config::sunshine.server_cmds) {
+        pt::ptree node;
+        node.put_value(cmd.name);
+        tree.get_child("root").push_back(std::make_pair("ServerCommand", node));
+      }
     } else {
       tree.put("root.mac", "00:00:00:00:00:00");
     }

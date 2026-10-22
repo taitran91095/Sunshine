@@ -31,6 +31,14 @@
 
 namespace proc {
   /**
+   * @brief Resolve the working directory of a configured command.
+   * @param cmd Host command line.
+   * @param env Child process environment.
+   * @return Directory containing the executable, or an empty path.
+   */
+  boost::filesystem::path find_working_directory(const std::string &cmd, boost::process::v1::environment &env);
+
+  /**
    * @brief Boost.Process pipe stream used for child-process I/O.
    */
   using file_t = util::safe_ptr_v2<FILE, int, &fclose>;

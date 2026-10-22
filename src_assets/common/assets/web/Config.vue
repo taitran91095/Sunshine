@@ -293,7 +293,7 @@
           delete this.config.version;
 
           // Parse the special options before population if available
-          const specialOptions = ["dd_mode_remapping", "global_prep_cmd"]
+          const specialOptions = ["dd_mode_remapping", "global_prep_cmd", "server_cmd"]
           for (const optionKey of specialOptions) {
             if (this.config.hasOwnProperty(optionKey)) {
               this.config[optionKey] = JSON.parse(this.config[optionKey]);
@@ -334,7 +334,12 @@
         this.$forceUpdate()
       },
       serialize() {
-        return structuredClone(toRaw(this.config));
+        const config = structuredClone(toRaw(this.config));
+        // Ignore unfinished rows, as with Apollo's server-command editor.
+        if (config.server_cmd) {
+          config.server_cmd = config.server_cmd.filter(cmd => cmd.name?.trim() && cmd.cmd?.trim());
+        }
+        return config;
       },
       save() {
         this.saved = false;

@@ -18,6 +18,7 @@
 
 // local includes
 #include <src/network.h>
+#include <src/server_commands.h>
 
 namespace stream {
   std::vector<uint8_t> concat_and_insert(uint64_t insert_size, uint64_t slice_size, const std::string_view &data1, const std::string_view &data2);
@@ -84,4 +85,29 @@ TEST(ControlPacketTests, AcceptsTypeAndPayload) {
   ASSERT_TRUE(message);
   EXPECT_EQ(message->first, 0x0206);
   EXPECT_EQ(message->second, "abc");
+}
+
+
+/**
+ * @brief Only authenticated command requests for configured indices are valid.
+ */
+TEST(ServerCommandIndexTest, RejectsMalformedAndUnencryptedRequests) {
+  EXPECT_FALSE(server_commands::command_index({}, 1, 13));
+  EXPECT_FALSE(server_commands::command_index(std::string(2, '\0'), 1, 13));
+  EXPECT_FALSE(server_commands::command_index(std::string(1, '\0'), 1, 1));
+  EXPECT_FALSE(server_commands::command_index(std::string(1, '\0'), 0, 13));
+  EXPECT_FALSE(server_commands::command_index(std::string(1, '\1'), 1, 13));
+  EXPECT_EQ(server_commands::command_index(std::string(1, '\0'), 1, 13), 0);
+  EXPECT_EQ(server_commands::command_index(std::string(1, static_cast<char>(255)), 256, 13), 255);
+}
+
+/**
+ * @brief Artemis sends three reserved zero bytes after the command index.
+ */
+TEST(ServerCommandIndexTest, AcceptsArtemisPaddingAndRejectsNonzeroReservedBytes) {
+  EXPECT_EQ(server_commands::command_index(std::string(4, '\0'), 1, 13), 0);
+  EXPECT_EQ(server_commands::command_index(std::string("\xff\0\0\0", 4), 256, 13), 255);
+  EXPECT_FALSE(server_commands::command_index(std::string("\0\1\0\0", 4), 1, 13));
+  EXPECT_FALSE(server_commands::command_index(std::string(3, '\0'), 1, 13));
+  EXPECT_FALSE(server_commands::command_index(std::string(5, '\0'), 1, 13));
 }

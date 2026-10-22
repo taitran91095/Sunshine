@@ -1,8 +1,11 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+vi.mock('../../src_assets/common/assets/web/Navbar.vue', () => ({ default: { template: '<div />' } }))
 
 import DisplayDeviceOptions from '../../src_assets/common/assets/web/configs/tabs/audiovideo/DisplayDeviceOptions.vue'
 import Advanced from '../../src_assets/common/assets/web/configs/tabs/Advanced.vue'
+import Config from '../../src_assets/common/assets/web/Config.vue'
 import General from '../../src_assets/common/assets/web/configs/tabs/General.vue'
 import Inputs from '../../src_assets/common/assets/web/configs/tabs/Inputs.vue'
 import Network from '../../src_assets/common/assets/web/configs/tabs/Network.vue'
@@ -219,5 +222,33 @@ describe('gamepad input configuration', () => {
       'auto', 'x360', 'ds4',
     ])
     expect(wrapper.get('#gamepad').element.value).toBe('auto')
+  })
+})
+
+describe('server commands', () => {
+  it('omits unfinished rows when serializing without mutating the editor', () => {
+    const config = { server_cmd: [{ name: 'Valid', cmd: 'echo' }, { name: ' ', cmd: 'echo' }, { name: 'unfinished', cmd: '' }] }
+    const serialized = Config.methods.serialize.call({ config })
+    expect(serialized.server_cmd).toEqual([{ name: 'Valid', cmd: 'echo' }])
+    expect(config.server_cmd).toHaveLength(3)
+  })
+
+  it('adds, edits and removes named host commands', async () => {
+    const config = { global_prep_cmd: [], server_cmd: [], notify_pre_releases: false, system_tray: true }
+    const wrapper = mount(General, { props: { platform: 'linux', config }, global: globalOptions })
+    await wrapper.get('#server_cmd button.btn-success').trigger('click')
+    await wrapper.get('#server-cmd-name-0').setValue('Calculator')
+    await wrapper.get('#server-cmd-value-0').setValue('calculator')
+    expect(config.server_cmd).toEqual([{ name: 'Calculator', cmd: 'calculator', elevated: false }])
+    expect(wrapper.get('label[for="server-cmd-name-0"]').exists()).toBe(true)
+    await wrapper.get('#server_cmd button.btn-danger').trigger('click')
+    expect(config.server_cmd).toEqual([])
+  })
+
+  it('limits commands to the byte-sized protocol index', () => {
+    const config = { global_prep_cmd: [], notify_pre_releases: false, system_tray: true, server_cmd: Array.from({ length: 256 }, () => ({ name: 'x', cmd: 'echo', elevated: false })) }
+    const wrapper = mount(General, { props: { platform: 'windows', config }, global: globalOptions })
+    expect(wrapper.get('#server_cmd button.btn-success').element.disabled).toBe(true)
+    expect(wrapper.findAll('checkbox-stub').some(c => c.attributes('id') === 'server-cmd-admin-0')).toBe(true)
   })
 })
